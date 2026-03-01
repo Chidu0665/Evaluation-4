@@ -1,7 +1,8 @@
 trigger: none
 
 pool:
-  name: Chidu-Pool
+  name: New-pool
+
 
 variables:
 - group: chidu-key-vault   # Contains ssh_public_key
