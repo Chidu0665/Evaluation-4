@@ -1,0 +1,148 @@
+trigger: none
+
+pool:
+  name: Chidu-Pool
+
+variables:
+- group: chidu-key-vault   # Contains ssh_public_key
+
+- name: terraformVersion
+  value: 1.6.6
+
+- name: azureServiceConnection
+  value: ado-arm
+
+- name: backendResourceGroup
+  value: Chidu-RG
+
+- name: backendStorageAccount
+  value: chiduadosa
+
+- name: backendContainer
+  value: terraformado
+
+- name: backendKey
+  value: linuxvm.tfstate
+
+- name: terraformDirectory
+  value: $(System.DefaultWorkingDirectory)/Linux_VM
+
+
+# ================================
+# STAGES
+# ================================
+stages:
+
+# ================================
+# INIT STAGE
+# ================================
+- stage: Terraform_Init
+  displayName: Terraform Init
+  jobs:
+  - job: Init
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: $(terraformVersion)
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Init
+      inputs:
+        provider: azurerm
+        command: init
+        workingDirectory: $(terraformDirectory)
+        backendServiceArm: $(azureServiceConnection)
+        backendAzureRmResourceGroupName: $(backendResourceGroup)
+        backendAzureRmStorageAccountName: $(backendStorageAccount)
+        backendAzureRmContainerName: $(backendContainer)
+        backendAzureRmKey: $(backendKey)
+        commandOptions: -reconfigure
+
+
+# ================================
+# PLAN STAGE
+# ================================
+- stage: Terraform_Plan
+  displayName: Terraform Plan
+  dependsOn: Terraform_Init
+  jobs:
+  - job: Plan
+    steps:
+    - checkout: self
+
+    - task: TerraformInstaller@1
+      displayName: Install Terraform
+      inputs:
+        terraformVersion: $(terraformVersion)
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Init
+      inputs:
+        provider: azurerm
+        command: init
+        workingDirectory: $(terraformDirectory)
+        backendServiceArm: $(azureServiceConnection)
+        backendAzureRmResourceGroupName: $(backendResourceGroup)
+        backendAzureRmStorageAccountName: $(backendStorageAccount)
+        backendAzureRmContainerName: $(backendContainer)
+        backendAzureRmKey: $(backendKey)
+        commandOptions: -reconfigure
+
+    - task: TerraformTaskV4@4
+      displayName: Terraform Plan
+      inputs:
+        provider: azurerm
+        command: plan
+        workingDirectory: $(terraformDirectory)
+        environmentServiceNameAzureRM: $(azureServiceConnection)
+        commandOptions: >
+          -var="ssh_public_key=$(linux-key)"
+
+
+# ================================
+# APPLY STAGE
+# ================================
+- stage: Terraform_Apply
+  displayName: Terraform Apply
+  dependsOn: Terraform_Plan
+  jobs:
+  - deployment: Apply
+    displayName: Apply Terraform
+    environment: linux-vm
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+
+          - task: TerraformInstaller@1
+            displayName: Install Terraform
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          - task: TerraformTaskV4@4
+            displayName: Terraform Init
+            inputs:
+              provider: azurerm
+              command: init
+              workingDirectory: $(terraformDirectory)
+              backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: $(backendResourceGroup)
+              backendAzureRmStorageAccountName: $(backendStorageAccount)
+              backendAzureRmContainerName: $(backendContainer)
+              backendAzureRmKey: $(backendKey)
+              commandOptions: -reconfigure
+
+          - task: TerraformTaskV4@4
+            displayName: Terraform Apply
+            inputs:
+              provider: azurerm
+              command: apply
+              workingDirectory: $(terraformDirectory)
+              environmentServiceNameAzureRM: $(azureServiceConnection)
+              commandOptions: >
+                -auto-approve
+                -var="ssh_public_key=$(linux-key)"
